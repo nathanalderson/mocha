@@ -1243,7 +1243,7 @@ exports.cursor = {
  * exceeds the following value in milliseconds.
  */
 
-exports.slow = 75;
+exports.slow = 4000;
 
 /**
  * Outut the given `failures` as a list.
@@ -1773,7 +1773,7 @@ function HTML(runner) {
     window.scrollTo(0, document.body.scrollHeight);
 
     // TODO: add to stats
-    var percent = stats.tests / total * 100 | 0;
+    var percent = stats.tests / this.total * 100 | 0;
     if (progress) progress.update(percent).draw(ctx);
 
     // update stats

@@ -4863,7 +4863,7 @@ window.mocha = require('mocha');
     var Reporter = options.reporter || mocha.reporters.HTML;
     var reporter = new Reporter(runner);
     var query = parse(window.location.search || "");
-    if (query.grep) runner.grep(new RegExp(query.grep));
+    if (query.grep) runner.grep(new RegExp(query.grep), query.invert);
     if (options.ignoreLeaks) runner.ignoreLeaks = true;
     if (options.globals) runner.globals(options.globals);
     runner.globals(['location']);

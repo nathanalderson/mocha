@@ -537,19 +537,6 @@ module.exports = function(suite){
 
   suite.on('pre-require', function(context){
 
-    // pending variants
-
-    context.xdescribe = function(title, fn){
-      var suite = Suite.create(suites[0], title);
-      suite.pending = true;
-      suites.unshift(suite);
-      fn();
-      suites.shift();
-    };
-    context.xit = function(title){
-      context.it(title);
-    };
-
     /**
      * Execute before running tests.
      */
@@ -583,12 +570,24 @@ module.exports = function(suite){
     };
 
     /**
+     * Pending describe.
+     */
+
+    context.xdescribe = function(title, fn){
+      var suite = Suite.create(suites[0], title);
+      suite.pending = true;
+      suites.unshift(suite);
+      fn();
+      suites.shift();
+    };
+
+    /**
      * Describe a "suite" with the given `title`
      * and callback `fn` containing nested suites
      * and/or tests.
      */
   
-    context.describe = context.context = function(title, fn){
+    context.describe = function(title, fn){
       var suite = Suite.create(suites[0], title);
       suites.unshift(suite);
       fn();
@@ -601,9 +600,18 @@ module.exports = function(suite){
      * acting as a thunk.
      */
 
-    context.it = context.specify = function(title, fn){
-      if (suites[0].pending) var fn = undefined;
-      suites[0].addTest(new Test(title, fn));
+    context.it = function(title, fn){
+      var suite = suites[0];
+      if (suite.pending) var fn = null;
+      suite.addTest(new Test(title, fn));
+    };
+
+    /**
+     * Pending test case.
+     */
+
+    context.xit = function(title){
+      context.it(title);
     };
   });
 };
@@ -1116,6 +1124,282 @@ Mocha.prototype.run = function(fn){
 };
 
 }); // module: mocha.js
+
+require.register("reporters/anostos_xml.js", function(module, exports, require){
+
+/**
+ * Module dependencies.
+ */
+
+var Base = require('./base')
+  , utils = require('../utils')
+  , Progress = require('../browser/progress')
+  , escape = utils.escape;
+
+/**
+ * Save timer references to avoid Sinon interfering (see GH-237).
+ */
+
+var Date = global.Date
+  , setTimeout = global.setTimeout
+  , setInterval = global.setInterval
+  , clearTimeout = global.clearTimeout
+  , clearInterval = global.clearInterval;
+
+/**
+ * Expose `Doc`.
+ */
+
+exports = module.exports = Anostos_XML;
+
+/**
+ * Stats template.
+ */
+
+var statsTemplate = '<ul id="stats">'
+  + '<li class="progress"><canvas width="40" height="40"></canvas></li>'
+  + '<li class="passes"><a href="#">passes:</a> <em>0</em></li>'
+  + '<li class="failures"><a href="#">failures:</a> <em>0</em></li>'
+  + '<li class="duration">duration: <em>0</em>s</li>'
+  + '</ul>';
+
+/**
+ * Initialize a new `Doc` reporter.
+ *
+ * @param {Runner} runner
+ * @api public
+ */
+
+function Anostos_XML(runner) {
+  Base.call(this, runner);
+
+  var self = this
+    , stats = this.stats
+    , total = runner.total
+    , root = document.getElementById('mocha')
+    , xml_root = document.getElementById('mocha-xml')
+    , stat = fragment(statsTemplate)
+    , items = stat.getElementsByTagName('li')
+    , passes = items[1].getElementsByTagName('em')[0]
+    , passesLink = items[1].getElementsByTagName('a')[0]
+    , failures = items[2].getElementsByTagName('em')[0]
+    , failuresLink = items[2].getElementsByTagName('a')[0]
+    , duration = items[3].getElementsByTagName('em')[0]
+    , canvas = stat.getElementsByTagName('canvas')[0]
+    , report = fragment('<ul id="report"></ul>')
+    , xml_report = fragment("<return proc='report'></return>")
+    , stack = [report]
+    , xml_stack = [xml_report]
+    , progress
+    , ctx
+
+  if (canvas.getContext) {
+    ctx = canvas.getContext('2d');
+    progress = new Progress;
+  }
+
+  if (!root) return error('#mocha div missing, add it to your document');
+  if (!xml_root) return error('#mocha-xml div missing, add it to your document');
+
+  // pass toggle
+  on(passesLink, 'click', function () {
+    var className = /pass/.test(report.className) ? '' : ' pass';
+    report.className = report.className.replace(/fail|pass/g, '') + className;
+  });
+
+  // failure toggle
+  on(failuresLink, 'click', function () {
+    var className = /fail/.test(report.className) ? '' : ' fail';
+    report.className = report.className.replace(/fail|pass/g, '') + className;
+  });
+
+  root.appendChild(stat);
+  root.appendChild(report);
+  xml_root.appendChild(xml_report);
+
+  if (progress) progress.size(40);
+
+  runner.on('suite', function(suite){
+    if (suite.root) return;
+
+    // suite
+    var url = location.protocol + '//' + location.host + location.pathname + '?grep=^' + utils.escapeRegexp(suite.fullTitle());
+    var el = fragment('<li class="suite"><h1><a href="%s">%s</a></h1></li>', url, escape(suite.title));
+
+    // container
+    stack[0].appendChild(el);
+    stack.unshift(document.createElement('ul'));
+    el.appendChild(stack[0]);
+
+    // XML report
+    var elCallTo = fragment("<callto></callto>");
+    var elReturn = fragment("<return proc='%s'></return>", escape(suite.title));
+    elCallTo.appendChild(elReturn);
+    xml_stack[0].appendChild(elCallTo);
+    xml_stack[0].appendChild(fragment("<error>false</error>"));
+    xml_stack[0].appendChild(fragment("<errormsg>none</errormsg>"));
+    xml_stack.unshift(elReturn);
+  });
+
+  runner.on('suite end', function(suite){
+    if (suite.root) return;
+    stack.shift();
+    xml_stack.shift();
+  });
+
+  runner.on('fail', function(test, err){
+    if ('hook' == test.type || err.uncaught) runner.emit('test end', test);
+  });
+
+  runner.on('test end', function(test){
+    window.scrollTo(0, document.body.scrollHeight);
+
+    // TODO: add to stats
+    var percent = stats.tests / this.total * 100 | 0;
+    if (progress) progress.update(percent).draw(ctx);
+
+    // update stats
+    var ms = new Date - stats.start;
+    text(passes, stats.passes);
+    text(failures, stats.failures);
+    text(duration, (ms / 1000).toFixed(2));
+
+    // test
+    var str;
+    if ('passed' == test.state) {
+      var el = fragment('<li class="test pass %e"><h2>%e<span class="duration">%ems</span></h2></li>', test.speed, test.title, test.duration);
+    } else if (test.pending) {
+      var el = fragment('<li class="test pass pending"><h2>%e</h2></li>', test.title);
+    } else {
+      var el = fragment('<li class="test fail"><h2>%e</h2></li>', test.title);
+      str = test.err.stack || test.err.toString();
+
+      // FF / Opera do not add the message
+      if (!~str.indexOf(test.err.message)) {
+        str = test.err.message + '\n' + str;
+      }
+
+      // <=IE7 stringifies to [Object Error]. Since it can be overloaded, we
+      // check for the result of the stringifying.
+      if ('[object Error]' == str) str = test.err.message;
+
+      // Safari doesn't give you a stack. Let's at least provide a source line.
+      if (!test.err.stack && test.err.sourceURL && test.err.line !== undefined) {
+        str += "\n(" + test.err.sourceURL + ":" + test.err.line + ")";
+      }
+
+      el.appendChild(fragment('<pre class="error">%e</pre>', str));
+    }
+
+    // toggle code
+    // TODO: defer
+    if (!test.pending) {
+      var h2 = el.getElementsByTagName('h2')[0];
+
+      on(h2, 'click', function(){
+        pre.style.display = 'none' == pre.style.display
+          ? 'inline-block'
+          : 'none';
+      });
+
+      var pre = fragment('<pre><code>%e</code></pre>', utils.clean(test.fn.toString()));
+      el.appendChild(pre);
+      pre.style.display = 'none';
+    }
+
+    stack[0].appendChild(el);
+
+    // XML Report
+    var elCallTo = fragment("<callto></callto>");
+    var elReturn = fragment("<return proc='%e'></return>", test.title);
+    elCallTo.appendChild(elReturn);
+    var elError, elErrorMsg, elOuterError, elOuterErrorMsg;
+    if ('passed' == test.state || test.pending) {
+        elError         = fragment("<error>false</error>");
+        elErrorMsg      = fragment("<errormsg>none</errormsg>");
+        elOuterError    = fragment("<error>false</error>");
+        elOuterErrorMsg = fragment("<errormsg>none</errormsg>");
+    }
+    else {
+        elError         = fragment("<error>true</error>");
+        elErrorMsg      = fragment("<errormsg>%e</errormsg>", str); // str from above
+        elOuterError    = fragment("<error>true</error>");
+        elOuterErrorMsg = fragment("<errormsg>%e</errormsg>", "ErrorInCalling");
+    }
+    elReturn.appendChild(elError);
+    elReturn.appendChild(elErrorMsg);
+    xml_stack[0].appendChild(elCallTo);
+    xml_stack[0].appendChild(elOuterError);
+    xml_stack[0].appendChild(elOuterErrorMsg);
+    
+    // now loop through all the parents and set their error messages to true
+    // TODO: Tuesday - test and fix this.
+    for(var i = 1; i < xml_stack.length; i++)
+    {
+        var children = xml_stack[i].children;
+        for(var j = 0; i < children.length; i++)
+        {
+            if(children[j].nodeName == 'ERROR')
+                children[j].innerHTML = "<error>true</error>";
+            else if(children[j].nodeName == 'ERRORMSG')
+                children[j].innerHTML = "<errormsg>ErrorInCalling</errormsg>";
+        }
+    }
+  });
+}
+
+/**
+ * Display error `msg`.
+ */
+
+function error(msg) {
+  document.body.appendChild(fragment('<div id="error">%s</div>', msg));
+}
+
+/**
+ * Return a DOM fragment from `html`.
+ */
+
+function fragment(html) {
+  var args = arguments
+    , div = document.createElement('div')
+    , i = 1;
+
+  div.innerHTML = html.replace(/%([se])/g, function(_, type){
+    switch (type) {
+      case 's': return String(args[i++]);
+      case 'e': return escape(args[i++]);
+    }
+  });
+
+  return div.firstChild;
+}
+
+/**
+ * Set `el` text to `str`.
+ */
+
+function text(el, str) {
+  if (el.textContent) {
+    el.textContent = str;
+  } else {
+    el.innerText = str;
+  }
+}
+
+/**
+ * Listen on `event` with callback `fn`.
+ */
+
+function on(el, event, fn) {
+  if (el.addEventListener) {
+    el.addEventListener(event, fn, false);
+  } else {
+    el.attachEvent('on' + event, fn);
+  }
+}
+
+}); // module: reporters/anostos_xml.js
 
 require.register("reporters/base.js", function(module, exports, require){
 
@@ -1889,6 +2173,7 @@ exports.Doc = require('./doc');
 exports.TAP = require('./tap');
 exports.JSON = require('./json');
 exports.HTML = require('./html');
+exports.Anostos_XML = require('./anostos_xml');
 exports.List = require('./list');
 exports.Min = require('./min');
 exports.Spec = require('./spec');
@@ -2056,70 +2341,6 @@ function clean(test) {
 
 }); // module: reporters/json-cov.js
 
-require.register("reporters/json-stream.js", function(module, exports, require){
-
-/**
- * Module dependencies.
- */
-
-var Base = require('./base')
-  , color = Base.color;
-
-/**
- * Expose `List`.
- */
-
-exports = module.exports = List;
-
-/**
- * Initialize a new `List` test reporter.
- *
- * @param {Runner} runner
- * @api public
- */
-
-function List(runner) {
-  Base.call(this, runner);
-
-  var self = this
-    , stats = this.stats
-    , total = runner.total;
-
-  runner.on('start', function(){
-    console.log(JSON.stringify(['start', { total: total }]));
-  });
-
-  runner.on('pass', function(test){
-    console.log(JSON.stringify(['pass', clean(test)]));
-  });
-
-  runner.on('fail', function(test, err){
-    console.log(JSON.stringify(['fail', clean(test)]));
-  });
-
-  runner.on('end', function(){
-    process.stdout.write(JSON.stringify(['end', self.stats]));
-  });
-}
-
-/**
- * Return a plain-object representation of `test`
- * free of cyclic properties etc.
- *
- * @param {Object} test
- * @return {Object}
- * @api private
- */
-
-function clean(test) {
-  return {
-      title: test.title
-    , fullTitle: test.fullTitle()
-    , duration: test.duration
-  }
-}
-}); // module: reporters/json-stream.js
-
 require.register("reporters/json.js", function(module, exports, require){
 
 /**
@@ -2192,6 +2413,70 @@ function clean(test) {
   }
 }
 }); // module: reporters/json.js
+
+require.register("reporters/json-stream.js", function(module, exports, require){
+
+/**
+ * Module dependencies.
+ */
+
+var Base = require('./base')
+  , color = Base.color;
+
+/**
+ * Expose `List`.
+ */
+
+exports = module.exports = List;
+
+/**
+ * Initialize a new `List` test reporter.
+ *
+ * @param {Runner} runner
+ * @api public
+ */
+
+function List(runner) {
+  Base.call(this, runner);
+
+  var self = this
+    , stats = this.stats
+    , total = runner.total;
+
+  runner.on('start', function(){
+    console.log(JSON.stringify(['start', { total: total }]));
+  });
+
+  runner.on('pass', function(test){
+    console.log(JSON.stringify(['pass', clean(test)]));
+  });
+
+  runner.on('fail', function(test, err){
+    console.log(JSON.stringify(['fail', clean(test)]));
+  });
+
+  runner.on('end', function(){
+    process.stdout.write(JSON.stringify(['end', self.stats]));
+  });
+}
+
+/**
+ * Return a plain-object representation of `test`
+ * free of cyclic properties etc.
+ *
+ * @param {Object} test
+ * @return {Object}
+ * @api private
+ */
+
+function clean(test) {
+  return {
+      title: test.title
+    , fullTitle: test.fullTitle()
+    , duration: test.duration
+  }
+}
+}); // module: reporters/json-stream.js
 
 require.register("reporters/landing.js", function(module, exports, require){
 
@@ -3128,7 +3413,11 @@ function XUnit(runner) {
     , tests = []
     , self = this;
 
-  runner.on('test end', function(test){
+  runner.on('pass', function(test){
+    tests.push(test);
+  });
+  
+  runner.on('fail', function(test){
     tests.push(test);
   });
 
@@ -3928,6 +4217,7 @@ exports = module.exports = Suite;
 exports.create = function(parent, title){
   var suite = new Suite(title, parent.ctx);
   suite.parent = parent;
+  if (parent.pending) suite.pending = true;
   title = suite.fullTitle();
   parent.addSuite(suite);
   return suite;
@@ -3947,6 +4237,7 @@ function Suite(title, ctx) {
   this.ctx = ctx;
   this.suites = [];
   this.tests = [];
+  this.pending = false;
   this._beforeEach = [];
   this._beforeAll = [];
   this._afterEach = [];
@@ -4020,6 +4311,7 @@ Suite.prototype.bail = function(bail){
  */
 
 Suite.prototype.beforeAll = function(fn){
+  if (this.pending) return this;
   var hook = new Hook('"before all" hook', fn);
   hook.parent = this;
   hook.timeout(this.timeout());
@@ -4038,6 +4330,7 @@ Suite.prototype.beforeAll = function(fn){
  */
 
 Suite.prototype.afterAll = function(fn){
+  if (this.pending) return this;
   var hook = new Hook('"after all" hook', fn);
   hook.parent = this;
   hook.timeout(this.timeout());
@@ -4056,6 +4349,7 @@ Suite.prototype.afterAll = function(fn){
  */
 
 Suite.prototype.beforeEach = function(fn){
+  if (this.pending) return this;
   var hook = new Hook('"before each" hook', fn);
   hook.parent = this;
   hook.timeout(this.timeout());
@@ -4074,6 +4368,7 @@ Suite.prototype.beforeEach = function(fn){
  */
 
 Suite.prototype.afterEach = function(fn){
+  if (this.pending) return this;
   var hook = new Hook('"after each" hook', fn);
   hook.parent = this;
   hook.timeout(this.timeout());
@@ -4568,7 +4863,7 @@ window.mocha = require('mocha');
     var Reporter = options.reporter || mocha.reporters.HTML;
     var reporter = new Reporter(runner);
     var query = parse(window.location.search || "");
-    if (query.grep) runner.grep(new RegExp(query.grep), query.invert);
+    if (query.grep) runner.grep(new RegExp(query.grep));
     if (options.ignoreLeaks) runner.ignoreLeaks = true;
     if (options.globals) runner.globals(options.globals);
     runner.globals(['location']);

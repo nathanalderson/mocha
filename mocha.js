@@ -1324,27 +1324,26 @@ function Anostos_XML(runner) {
         elError         = fragment("<error>true</error>");
         elErrorMsg      = fragment("<errormsg>%e</errormsg>", str); // str from above
         elOuterError    = fragment("<error>true</error>");
-        elOuterErrorMsg = fragment("<errormsg>%e</errormsg>", "ErrorInCalling");
+        elOuterErrorMsg = fragment("<errormsg>%e</errormsg>", "ErrorInCallTo");
+
+        // now loop through all the parents and set their error messages to true
+        for(var i = 1; i < xml_stack.length; i++)
+        {
+            var children = xml_stack[i].children;
+            for(var j = 0; j < children.length; j++)
+            {
+                if(children[j].nodeName == 'ERROR')
+                    children[j].innerHTML = "true";
+                else if(children[j].nodeName == 'ERRORMSG')
+                    children[j].innerHTML = "ErrorInCallTo";
+            }
+        }
     }
     elReturn.appendChild(elError);
     elReturn.appendChild(elErrorMsg);
     xml_stack[0].appendChild(elCallTo);
     xml_stack[0].appendChild(elOuterError);
     xml_stack[0].appendChild(elOuterErrorMsg);
-    
-    // now loop through all the parents and set their error messages to true
-    // TODO: Tuesday - test and fix this.
-    for(var i = 1; i < xml_stack.length; i++)
-    {
-        var children = xml_stack[i].children;
-        for(var j = 0; i < children.length; i++)
-        {
-            if(children[j].nodeName == 'ERROR')
-                children[j].innerHTML = "<error>true</error>";
-            else if(children[j].nodeName == 'ERRORMSG')
-                children[j].innerHTML = "<errormsg>ErrorInCalling</errormsg>";
-        }
-    }
   });
 }
 

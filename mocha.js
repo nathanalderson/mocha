@@ -1187,7 +1187,7 @@ function Anostos_XML(runner) {
     , duration = items[3].getElementsByTagName('em')[0]
     , canvas = stat.getElementsByTagName('canvas')[0]
     , report = fragment('<ul id="report"></ul>')
-    , xml_report = fragment("<return proc='report'></return>")
+    , xml_report = fragment('<MochaNS:return proc="report"></MochaNS:return>')
     , stack = [report]
     , xml_stack = [xml_report]
     , progress
@@ -1232,12 +1232,12 @@ function Anostos_XML(runner) {
     el.appendChild(stack[0]);
 
     // XML report
-    var elCallTo = fragment("<callto></callto>");
-    var elReturn = fragment("<return proc='%s'></return>", escape(suite.title));
+    var elCallTo = fragment("<MochaNS:callto></MochaNS:callto>");
+    var elReturn = fragment("<MochaNS:return proc='%s'></MochaNS:return>", escape(suite.title));
     elCallTo.appendChild(elReturn);
     xml_stack[0].appendChild(elCallTo);
-    xml_stack[0].appendChild(fragment("<error>false</error>"));
-    xml_stack[0].appendChild(fragment("<errormsg>none</errormsg>"));
+    xml_stack[0].appendChild(fragment("<MochaNS:error>false</MochaNS:error>"));
+    xml_stack[0].appendChild(fragment("<MochaNS:errormsg>none</MochaNS:errormsg>"));
     xml_stack.unshift(elReturn);
   });
 
@@ -1310,21 +1310,21 @@ function Anostos_XML(runner) {
     stack[0].appendChild(el);
 
     // XML Report
-    var elCallTo = fragment("<callto></callto>");
-    var elReturn = fragment("<return proc='%e'></return>", test.title);
+    var elCallTo = fragment("<MochaNS:callto></MochaNS:callto>");
+    var elReturn = fragment("<MochaNS:return proc='%e'></MochaNS:return>", test.title);
     elCallTo.appendChild(elReturn);
     var elError, elErrorMsg, elOuterError, elOuterErrorMsg;
     if ('passed' == test.state || test.pending) {
-        elError         = fragment("<error>false</error>");
-        elErrorMsg      = fragment("<errormsg>none</errormsg>");
-        elOuterError    = fragment("<error>false</error>");
-        elOuterErrorMsg = fragment("<errormsg>none</errormsg>");
+        elError         = fragment("<MochaNS:error>false</MochaNS:error>");
+        elErrorMsg      = fragment("<MochaNS:errormsg>none</MochaNS:errormsg>");
+        elOuterError    = fragment("<MochaNS:error>false</MochaNS:error>");
+        elOuterErrorMsg = fragment("<MochaNS:errormsg>none</MochaNS:errormsg>");
     }
     else {
-        elError         = fragment("<error>true</error>");
-        elErrorMsg      = fragment("<errormsg>%e</errormsg>", str); // str from above
-        elOuterError    = fragment("<error>true</error>");
-        elOuterErrorMsg = fragment("<errormsg>%e</errormsg>", "ErrorInCallTo");
+        elError         = fragment("<MochaNS:error>true</MochaNS:error>");
+        elErrorMsg      = fragment("<MochaNS:errormsg>%e</MochaNS:errormsg>", str); // str from above
+        elOuterError    = fragment("<MochaNS:error>true</MochaNS:error>");
+        elOuterErrorMsg = fragment("<MochaNS:errormsg>%e</MochaNS:errormsg>", "ErrorInCallTo");
 
         // now loop through all the parents and set their error messages to true
         for(var i = 1; i < xml_stack.length; i++)
@@ -1364,12 +1364,14 @@ function fragment(html) {
     , div = document.createElement('div')
     , i = 1;
 
-  div.innerHTML = html.replace(/%([se])/g, function(_, type){
+  function replaceMethod(_, type){
     switch (type) {
       case 's': return String(args[i++]);
       case 'e': return escape(args[i++]);
     }
-  });
+  }
+
+  div.innerHTML = html.replace(/%([se])/g, replaceMethod);
 
   return div.firstChild;
 }
@@ -4705,7 +4707,8 @@ exports.clean = function(str) {
 
   str = str.replace(re, '');
 
-  return str.trim();
+  // cross-browser str.trim()
+  return str.replace(/^\s+/, "").replace(/\s+$/, "");
 };
 
 /**
@@ -4719,6 +4722,7 @@ exports.clean = function(str) {
 exports.escapeRegexp = function(str){
   return str.replace(/[-\\^$*+?.()|[\]{}]/g, "\\$&");
 };
+
 }); // module: utils.js
 /**
  * Node shims.

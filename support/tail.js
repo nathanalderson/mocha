@@ -19,7 +19,7 @@ global = window;
 process.nextTick = (function(){
   // postMessage behaves badly on IE8
   if (window.ActiveXObject || !window.postMessage) {
-    return function(fn){ fn() };
+    return function(fn){ setTimeout(fn, 0); };
   }
 
   // based on setZeroTimeout by David Baron

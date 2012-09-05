@@ -1166,7 +1166,7 @@ function Anostos_XML(runner) {
 
     // XML report
     var elCallTo = fragment("<MochaNS:callto></MochaNS:callto>");
-    var elReturn = fragment("<MochaNS:return proc='%s'></MochaNS:return>", escape(suite.title));
+    var elReturn = fragment('<MochaNS:return proc="%s"></MochaNS:return>', escape(suite.title));
     elCallTo.appendChild(elReturn);
     xml_stack[0].appendChild(elCallTo);
     xml_stack[0].appendChild(fragment("<MochaNS:error>false</MochaNS:error>"));
@@ -1200,7 +1200,7 @@ function Anostos_XML(runner) {
 
     // XML Report
     var elCallTo = fragment("<MochaNS:callto></MochaNS:callto>");
-    var elReturn = fragment("<MochaNS:return proc='%e'></MochaNS:return>", test.title);
+    var elReturn = fragment('<MochaNS:return proc="%e"></MochaNS:return>', test.title);
     elCallTo.appendChild(elReturn);
     var elError, elErrorMsg, elOuterError, elOuterErrorMsg;
     if ('passed' == test.state || test.pending) {
@@ -4634,7 +4634,7 @@ global = window;
 process.nextTick = (function(){
   // postMessage behaves badly on IE8
   if (window.ActiveXObject || !window.postMessage) {
-    return function(fn){ fn() };
+    return function(fn){ setTimeout(fn, 0); };
   }
 
   // based on setZeroTimeout by David Baron

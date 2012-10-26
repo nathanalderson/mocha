@@ -5092,6 +5092,7 @@ process.on = function(e, fn){
     var query = Mocha.utils.parseQuery(window.location.search || '');
     if (query.grep) mocha.grep(query.grep);
     if (query.find) mocha.find(query.find);
+    if (query.invert) mocha.invert();
 
     return Mocha.prototype.run.call(mocha, function(){
       Mocha.utils.highlightTags('code');

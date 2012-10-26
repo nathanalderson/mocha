@@ -1118,7 +1118,7 @@ Mocha.prototype._growl = function(runner, reporter) {
 };
 
 /**
- * Add regexp to grep, if `re` is a string it is escaped.
+ * Add regexp to grep
  *
  * @param {RegExp|String} re
  * @return {Mocha}
@@ -1126,6 +1126,21 @@ Mocha.prototype._growl = function(runner, reporter) {
  */
 
 Mocha.prototype.grep = function(re){
+  this.options.grep = 'string' == typeof re
+    ? new RegExp(re)
+    : re;
+  return this;
+};
+
+/**
+ * Add regexp to grep, if `re` is a string it is escaped.
+ *
+ * @param {RegExp|String} re
+ * @return {Mocha}
+ * @api public
+ */
+
+Mocha.prototype.find = function(re){
   this.options.grep = 'string' == typeof re
     ? new RegExp(utils.escapeRegexp(re))
     : re;
@@ -5076,6 +5091,7 @@ process.on = function(e, fn){
 
     var query = Mocha.utils.parseQuery(window.location.search || '');
     if (query.grep) mocha.grep(query.grep);
+    if (query.find) mocha.find(query.find);
 
     return Mocha.prototype.run.call(mocha, function(){
       Mocha.utils.highlightTags('code');
